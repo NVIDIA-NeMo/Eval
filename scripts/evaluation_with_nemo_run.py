@@ -26,6 +26,7 @@ from nvidia_eval_commons.api.api_dataclasses import ApiEndpoint, ConfigParams, E
 from nvidia_eval_commons.core.evaluate import evaluate
 
 from nemo_eval.api import deploy
+from nemo_eval.utils.base import check_endpoint
 
 ENDPOINT_TYPES = {"chat": "chat/completions/", "completions": "completions/"}
 
@@ -203,6 +204,17 @@ def local_executor_torchrun() -> run.LocalExecutor:
     return executor
 
 
+def wait_and_evaluate(target_cfg, eval_cfg):
+    server_ready = check_endpoint(
+        endpoint_url=target_cfg.api_endpoint.url,
+        endpoint_type=target_cfg.api_endpoint.type,
+        model_name=target_cfg.api_endpoint.model_id,
+    )
+    if not server_ready:
+        raise RuntimeError("Server is not ready to accept requests. Check the deployment logs for errors.")
+    return evaluate(target_cfg=target_cfg, eval_cfg=eval_cfg)
+
+
 def main():
     args = get_parser().parse_args()
     if args.tag and not args.tag.startswith("-"):
@@ -218,7 +230,7 @@ def main():
         triton_address=args.triton_address,
         triton_port=args.triton_port,
         num_replicas=args.num_replicas,
-        num_cpus_per_replica=args.num_cpus_per_replica,
+        num_cpus=args.num_cpus_per_replica,
         max_input_len=args.max_input_len,
         tensor_parallelism_size=args.tensor_parallelism_size,
         pipeline_parallelism_size=args.pipeline_parallelism_size,
@@ -231,6 +243,7 @@ def main():
         ApiEndpoint,
         url=f"http://{args.server_address}:{args.server_port}/v1/{ENDPOINT_TYPES[args.endpoint_type]}",
         type=args.endpoint_type,
+        model_id="megatron_model",
     )
     eval_target = run.Config(EvaluationTarget, api_endpoint=api_endpoint)
     eval_params = run.Config(
@@ -239,9 +252,9 @@ def main():
         parallelism=args.parallel_requests,
         request_timeout=args.request_timeout,
     )
-    eval_config = run.Config(EvaluationConfig, type=args.eval_task, params=eval_params)
+    eval_config = run.Config(EvaluationConfig, type=args.eval_task, params=eval_params, output_dir="/results/")
 
-    eval_fn = run.Partial(evaluate, target_cfg=eval_target, eval_cfg=eval_config)
+    eval_fn = run.Partial(wait_and_evaluate, target_cfg=eval_target, eval_cfg=eval_config)
 
     executor: run.Executor
     executor_eval: run.Executor
@@ -272,11 +285,11 @@ def main():
                 [deploy_fn, eval_fn],
                 executor=[executor, executor_eval],
                 name=exp_name,
-                tail_logs=True if isinstance(executor, run.LocalExecutor) else False,
+                tail_logs=False,
             )
         else:
-            exp.add(deploy_fn, executor=executor, name=f"{exp_name}_deploy")
-            exp.add(eval_fn, executor=executor, name=f"{exp_name}_evaluate")
+            exp.add(deploy_fn, executor=executor, name=f"{exp_name}_deploy", tail_logs=True)
+            exp.add(eval_fn, executor=executor, name=f"{exp_name}_evaluate", tail_logs=True)
 
         if args.dryrun:
             exp.dryrun()

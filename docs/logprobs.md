@@ -46,7 +46,7 @@ Using log-probabilities is especially useful for evaluating base (pre-trained) m
 In this example, we will use the `arc_challenge` task from `nvidia-lm-eval`. The `nvidia-lm-eval` package comes pre-installed with the NeMo Framework Docker image. If you are using a different environment, install the evaluation package:
 
 ```bash
-pip install nvidia-lm-eval==25.6
+pip install nvidia-lm-eval
 ```
 
 1. Deploy your model:
@@ -60,6 +60,18 @@ pip install nvidia-lm-eval==25.6
 ```bash
 python deploy.py
 ```
+
+You can verify if the server is ready for accepting requests with the following function:
+```python
+from nemo_eval.utils.base import check_endpoint
+
+check_endpoint(
+    endpoint_url="http://0.0.0.0:8080/v1/completions/",
+    endpoint_type="completions",
+    model_name="megatron_model",
+)
+```
+
 The server will return the log-probabilities of tokens if it receives a `logprob=<int>` parameter in the request.
 When combined with `echo=true`, the model will include the input in its response, along with the corresponding log-probabilities.
 
