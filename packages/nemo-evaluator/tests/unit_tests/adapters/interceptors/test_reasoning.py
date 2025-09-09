@@ -32,9 +32,7 @@ from nemo_evaluator.adapters.types import (
     AdapterResponse,
 )
 
-from tests.unit_tests.adapters.testing_utils import (
-    create_fake_endpoint_process,
-)
+from tests.unit_tests.adapters.testing_utils import create_fake_endpoint_process
 
 
 @pytest.fixture
